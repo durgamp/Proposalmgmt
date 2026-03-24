@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "declaration": false,
+    "declarationMap": false,
+    "types": ["node"],
+    "paths": {
+      "@biopropose/shared-types": ["../../packages/shared-types/dist"],
+      "@biopropose/database": ["../../packages/database/dist"],
+      "@biopropose/database/seed": ["../../packages/database/dist/seed"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,45 @@
+import { ProposalSectionEntity } from './ProposalSection.entity';
+import { CostItemEntity } from './CostItem.entity';
+import { ProjectStageEntity } from './ProjectStage.entity';
+import { ProjectActivityEntity } from './ProjectActivity.entity';
+import { CommentEntity } from './Comment.entity';
+import { AuditLogEntity } from './AuditLog.entity';
+import { ExportedFileEntity } from './ExportedFile.entity';
+export declare class ProposalEntity {
+    id: string;
+    name: string;
+    client: string;
+    bdManager: string;
+    proposalManager?: string;
+    proposalCode: string;
+    status: string;
+    method: string;
+    businessUnit?: string;
+    templateType?: string;
+    description?: string;
+    currentStage: number;
+    completionPercentage: number;
+    sfdcOpportunityCode?: string;
+    pmReviewComplete: boolean;
+    managementReviewComplete: boolean;
+    isAmendment: boolean;
+    parentProposalId?: string;
+    parentProposalCode?: string;
+    revisionNumber?: number;
+    amendmentDate?: string;
+    assignedStakeholdersJson: string;
+    get assignedStakeholders(): string[];
+    set assignedStakeholders(val: string[]);
+    createdBy?: string;
+    updatedBy?: string;
+    createdAt: Date;
+    updatedAt: Date;
+    sections: ProposalSectionEntity[];
+    costItems: CostItemEntity[];
+    projectStages: ProjectStageEntity[];
+    activities: ProjectActivityEntity[];
+    comments: CommentEntity[];
+    auditLogs: AuditLogEntity[];
+    exportedFiles: ExportedFileEntity[];
+}
+//# sourceMappingURL=Proposal.entity.d.ts.map

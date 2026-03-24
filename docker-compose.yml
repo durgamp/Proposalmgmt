@@ -1,0 +1,152 @@
+version: '3.9'
+
+# ============================================================
+# BioPropose — Full Stack Docker Compose
+#
+# External services (already running on your machine):
+#   MySQL   → container MYSQL   on host port 3306
+#   Ollama  → container ollama  on host port 11434
+#
+# Services started by this file:
+#   migrate → Runs TypeORM migrations once, then exits
+#   api     → Express API (port 4000) + Yjs WebSocket (port 4001)
+#   web     → React frontend via nginx (port 80)
+#
+# Usage:
+#   docker compose up -d               # Start with Ollama AI (default)
+#   docker compose logs -f api         # Watch API logs
+#   docker compose down                # Stop all
+#
+# LLM switching (no rebuild needed):
+#   Ollama  → AI_PROVIDER=ollama  (default, uses your running Ollama)
+#   Claude  → AI_PROVIDER=claude + ANTHROPIC_API_KEY=sk-ant-...
+#             docker compose up -d --no-deps api
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # Database Migrations (runs once on start, then exits)
+  # ----------------------------------------------------------
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: biopropose-migrate
+    command: ["node", "apps/api/dist/migrate.js"]
+    environment:
+      NODE_ENV: production
+      DB_TYPE: mysql
+      DB_HOST: host.docker.internal   # reaches the MYSQL container via host port 3306
+      DB_PORT: 3306
+      DB_USER: root
+      # WARNING: Set a strong password via DB_PASSWORD env var or a .env file.
+      # Never deploy with an empty password in production.
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: biopropose
+      DB_SSL: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
+  # ----------------------------------------------------------
+  # API Server (Express + Yjs WebSocket)
+  # Port 4000 used (3000 is already taken by openwebui)
+  # ----------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: biopropose-api
+    ports:
+      - "4000:3000"          # REST API  →  http://localhost:4000
+      - "4001:3001"          # Yjs WebSocket  →  ws://localhost:4001
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # Database — connects to your existing MYSQL container
+      DB_TYPE: mysql
+      DB_HOST: host.docker.internal
+      DB_PORT: 3306
+      DB_USER: root
+      # WARNING: Set a strong password via DB_PASSWORD env var or a .env file.
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_NAME: biopropose
+      DB_SSL: "false"
+      DB_POOL_MAX: 20
+      DB_POOL_MIN: 5
+
+      # ── AI Provider ──────────────────────────────────────
+      # Ollama  → AI_PROVIDER=ollama  (connects to your running Ollama)
+      # Claude  → AI_PROVIDER=claude + set ANTHROPIC_API_KEY below
+      # ─────────────────────────────────────────────────────
+      AI_PROVIDER: ${AI_PROVIDER:-ollama}
+
+      # Ollama — points to your existing ollama container
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3.5:4b}
+      OLLAMA_TIMEOUT: 120000
+
+      # Claude / Anthropic API
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-sonnet-4-6}
+
+      # Export
+      EXPORT_DIR: /app/exports
+
+      # Email
+      EMAIL_TRANSPORT: console
+      EMAIL_FROM: noreply@biopropose.local
+
+      # CORS
+      CORS_ORIGIN: http://localhost
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux compatibility
+    volumes:
+      - exports_data:/app/exports
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  # ----------------------------------------------------------
+  # React Frontend (served by nginx)
+  # ----------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:4000
+        VITE_WS_URL: ws://localhost:4001
+    container_name: biopropose-web
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+# ============================================================
+# Named Volumes
+# ============================================================
+volumes:
+  exports_data:     # Generated PDF/Word files
